@@ -121,4 +121,54 @@ def generate_report():
     current_time = get_current_time()
     
     # Определяем время отправки
-    if is_trading
+    if is_trading_day(current_time):
+        # Будний день - 6:40
+        report_time = current_time.replace(hour=6, minute=40, second=0, microsecond=0)
+    else:
+        # Выходной или праздник - 9:40
+        report_time = current_time.replace(hour=9, minute=40, second=0, microsecond=0)
+    
+    # Получаем данные
+    prices = get_stock_prices()
+    brent = get_brent_price()
+    news = get_tatneft_news()
+    
+    # Формируем сообщение
+    report = f"""
+📈 <b>Трейдинговая сводка Татнефть</b>
+⏰ <b>Время:</b> {current_time.strftime('%d.%m.%Y %H:%M')} МСК
+
+<b>Акции:</b>
+• TATN (обыкн.): {prices['TATN']} руб.
+• TATNP (прив.): {prices['TATNP']} руб.
+
+<b>Нефть Brent:</b> ${brent}
+
+<b>Последние новости:</b>
+{news}
+
+<b>Следующая сводка:</b> {report_time.strftime('%H:%M')} МСК
+"""
+    
+    return report
+
+def main():
+    """Основная функция"""
+    print("Запуск бота Татнефть...")
+    
+    # Проверяем наличие секретов
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Ошибка: TELEGRAM_TOKEN или TELEGRAM_CHAT_ID не установлены!")
+        print("Добавьте секреты в GitHub Actions")
+        return
+    
+    # Генерируем и отправляем отчет
+    report = generate_report()
+    
+    if send_telegram_message(report):
+        print("Отчет успешно отправлен!")
+    else:
+        print("Ошибка отправки отчета")
+
+if __name__ == "__main__":
+    main()
