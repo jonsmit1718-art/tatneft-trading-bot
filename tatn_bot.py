@@ -4,6 +4,7 @@
 Отправляет сводку перед началом торгов
 """
 
+import os
 import requests
 import json
 from datetime import datetime
@@ -25,7 +26,7 @@ def is_trading_day(date):
     # Праздники Московской биржи 2024 (основные)
     holidays = [
         '2024-01-01', '2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05',
-        '2024-01-08', '2024-02-23', '2024-03-08', '2024-05-01', '2024-05-09',
+        '2024-01-08', '2024-02-23', '2024-03-8', '2024-05-01', '2024-05-09',
         '2024-06-12', '2024-11-04'
     ]
     
@@ -66,20 +67,21 @@ def get_stock_prices():
             'TATN': tatn_price,
             'TATNP': tatnp_price
         }
-    except:
+    except Exception as e:
+        print(f"Ошибка получения цен акций: {e}")
         return {'TATN': 'Ошибка', 'TATNP': 'Ошибка'}
 
 def get_brent_price():
     """Цена нефти Brent"""
     try:
-        # Используем публичный API (пример)
-        response = requests.get("https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=BZ&apikey=demo", timeout=10)
-        data = response.json()
-        
-        if 'Global Quote' in data and '05. price' in data['Global Quote']:
-            return data['Global Quote']['05. price']
-    except:
-        pass
+        # Альтернативный источник
+        response = requests.get("https://api.oilpriceapi.com/v1/prices/latest", 
+                               headers={"Authorization": "Token free_demo_token"})
+        if response.status_code == 200:
+            data = response.json()
+            return data['data']['price']
+    except Exception as e:
+        print(f"Ошибка получения цены нефти: {e}")
     
     return "Н/Д"
 
@@ -96,13 +98,18 @@ def get_tatneft_news():
         
         if news_items:
             return "\n".join(news_items)
-    except:
+    except Exception as e:
+        print(f"Ошибка получения новостей: {e}")
         pass
     
     return "Новости временно недоступны"
 
 def send_telegram_message(text):
     """Отправка сообщения в Telegram"""
+    print(f"Отправка сообщения в Telegram...")
+    print(f"Токен: {'Есть' if TELEGRAM_TOKEN else 'Нет'}")
+    print(f"Chat ID: {TELEGRAM_CHAT_ID}")
+    
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     data = {
         "chat_id": TELEGRAM_CHAT_ID,
@@ -113,8 +120,16 @@ def send_telegram_message(text):
     
     try:
         response = requests.post(url, json=data, timeout=10)
-        return response.status_code == 200
-    except:
+        print(f"Ответ Telegram: статус {response.status_code}")
+        
+        if response.status_code == 200:
+            print("✅ Сообщение отправлено успешно!")
+            return True
+        else:
+            print(f"❌ Ошибка Telegram: {response.text}")
+            return False
+    except Exception as e:
+        print(f"❌ Ошибка соединения: {e}")
         return False
 
 def generate_report():
@@ -130,6 +145,7 @@ def generate_report():
         report_time = current_time.replace(hour=9, minute=40, second=0, microsecond=0)
     
     # Получаем данные
+    print("Получение данных...")
     prices = get_stock_prices()
     brent = get_brent_price()
     news = get_tatneft_news()
@@ -155,21 +171,50 @@ def generate_report():
 
 def main():
     """Основная функция"""
-    print("Запуск бота Татнефть...")
+    print("=" * 50)
+    print("ЗАПУСК БОТА ТАТНЕФТЬ")
+    print("=" * 50)
+    
+    # Отладочная информация
+    print(f"\n🔍 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ:")
+    print(f"Токен получен: {'ДА' if TELEGRAM_TOKEN else 'НЕТ'}")
+    if TELEGRAM_TOKEN:
+        print(f"Длина токена: {len(TELEGRAM_TOKEN)} символов")
+        print(f"Первые 10 символов: {TELEGRAM_TOKEN[:10]}...")
+    
+    print(f"Chat ID получен: {'ДА' if TELEGRAM_CHAT_ID else 'НЕТ'}")
+    if TELEGRAM_CHAT_ID:
+        print(f"Chat ID: {TELEGRAM_CHAT_ID}")
+    
+    print("-" * 50)
     
     # Проверяем наличие секретов
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Ошибка: TELEGRAM_TOKEN или TELEGRAM_CHAT_ID не установлены!")
-        print("Добавьте секреты в GitHub Actions")
+        print("❌ ОШИБКА: TELEGRAM_TOKEN или TELEGRAM_CHAT_ID не установлены!")
+        print("Добавьте секреты в GitHub Actions:")
+        print("1. TELEGRAM_BOT_TOKEN")
+        print("2. TELEGRAM_CHAT_ID")
         return
     
     # Генерируем и отправляем отчет
+    print("\n📊 Генерация отчета...")
     report = generate_report()
     
+    print("\n📄 ОТЧЕТ СГЕНЕРИРОВАН:")
+    print("-" * 30)
+    print(report)
+    print("-" * 30)
+    
+    print("\n📤 Отправка отчета...")
     if send_telegram_message(report):
-        print("Отчет успешно отправлен!")
+        print("\n✅ ОТЧЕТ УСПЕШНО ОТПРАВЛЕН!")
+        print("Проверьте Telegram через 1-2 минуты")
     else:
-        print("Ошибка отправки отчета")
+        print("\n❌ ОШИБКА ОТПРАВКИ ОТЧЕТА")
+        print("Возможные причины:")
+        print("1. Неправильный токен бота")
+        print("2. Неправильный Chat ID")
+        print("3. Бот заблокирован")
 
 if __name__ == "__main__":
     main()
