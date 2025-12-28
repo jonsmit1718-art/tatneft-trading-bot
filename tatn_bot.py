@@ -10,8 +10,9 @@ from datetime import datetime
 import pytz
 
 # ========== НАСТРОЙКИ ==========
-TELEGRAM_TOKEN = "7084464522:AAFvnGhQ8HpBBtEWfNpD3fq8fsYcmuzMG7Q"
-TELEGRAM_CHAT_ID = "587122738"
+# Получаем секреты из переменных окружения
+TELEGRAM_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 # ================================
 
 def get_current_time():
