@@ -11,6 +11,7 @@ on:
 jobs:
   send-report:
     runs-on: ubuntu-latest
+    timeout-minutes: 5  # ⬅️ ВАЖНО: максимум 5 минут!
 
     steps:
     - name: Загрузить код
@@ -26,12 +27,8 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests pytz feedparser
 
-    - name: Запустить бота
+    - name: Запустить бота (с таймаутом)
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      run: python tatn_bot.py
-
-    - name: Уведомление о завершении
-      if: always()
-      run: echo "✅ Рабочий процесс завершен в $(date)"
+      run: timeout 240 python tatn_bot.py  # 240 секунд = 4 минуты
