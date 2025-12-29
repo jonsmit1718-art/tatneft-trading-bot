@@ -1,6 +1,6 @@
 """
 Бот для трейдинга по Татнефти
-Отправляет сводку перед началом торгов с актуальными данными
+Отправляет сводку в 6:40 МСК (9:40 Омское время)
 """
 
 import os
@@ -9,6 +9,8 @@ import json
 import re
 from datetime import datetime, timedelta
 import pytz
+import schedule
+import time
 
 # ========== НАСТРОЙКИ ==========
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -20,9 +22,14 @@ def get_current_time():
     msk_tz = pytz.timezone('Europe/Moscow')
     return datetime.now(msk_tz)
 
+def get_omsk_time():
+    """Текущее омское время"""
+    omsk_tz = pytz.timezone('Asia/Omsk')
+    return datetime.now(omsk_tz)
+
 def is_trading_day(date):
     """Проверяем, торговый ли день"""
-    if date.weekday() >= 5:
+    if date.weekday() >= 5:  # Суббота и воскресенье
         return False
     
     holidays_2025 = [
@@ -206,26 +213,37 @@ def send_telegram_message(text):
     
     try:
         response = requests.post(url, json=data, timeout=10)
-        return response.status_code == 200
-    except:
+        if response.status_code == 200:
+            print("✅ Сообщение успешно отправлено в Telegram!")
+            return True
+        else:
+            print(f"❌ Ошибка Telegram: {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"❌ Ошибка отправки в Telegram: {e}")
         return False
 
 def generate_report():
     """Генерация трейдинговой сводки"""
     print("📡 Сбор данных для отчета...")
     
+    # Получаем текущее время
+    current_time = get_current_time()
+    omsk_time = get_omsk_time()
+    
+    # Получаем данные
     prices = get_stock_prices()
     brent = get_brent_price()
     news = get_tatneft_news()
     
+    # Рассчитываем аналитику
     analytics = calculate_correct_analytics(
         prices['TATN'], 
         prices['TATNP'], 
         brent
     )
     
-    current_time = get_current_time()
-    
+    # Определяем статус
     if is_trading_day(current_time):
         trading_status = "🟢 ТОРГОВЫЙ ДЕНЬ"
         next_action = "Начало торгов через 20 минут"
@@ -233,17 +251,12 @@ def generate_report():
         trading_status = "🔴 ВЫХОДНОЙ/ПРАЗДНИК"
         next_action = "Следующие торги в понедельник"
     
-    if current_time.hour < 6:
-        next_report = "06:40 МСК"
-    elif current_time.hour < 18:
-        next_report = "18:00 МСК"
-    else:
-        next_report = "06:40 МСК (завтра)"
-    
+    # Формируем сообщение
     report = f"""
 {trading_status}
 <b>📈 ТРЕЙДИНГОВАЯ СВОДКА ТАТНЕФТЬ</b>
-<b>⏰ Время:</b> {current_time.strftime('%d.%m.%Y %H:%M')} МСК
+<b>⏰ Время по МСК:</b> {current_time.strftime('%d.%m.%Y %H:%M')}
+<b>⏰ Время по Омску:</b> {omsk_time.strftime('%H:%M')}
 
 <b>ТЕКУЩИЕ ЦЕНЫ:</b>
 • TATN (обыкн.): {prices['TATN']} руб.
@@ -256,40 +269,113 @@ def generate_report():
 
 {analytics}
 
-<b>СЛЕДУЮЩИЙ ОТЧЕТ:</b> {next_report}
 <b>ДЕЙСТВИЕ:</b> {next_action}
 """
     
     return report
 
+def send_daily_report():
+    """Функция для отправки ежедневного отчета"""
+    print(f"\n{'='*60}")
+    print(f"📅 Запуск ежедневного отчета")
+    print(f"⏰ Время по МСК: {get_current_time().strftime('%H:%M')}")
+    print(f"⏰ Время по Омску: {get_omsk_time().strftime('%H:%M')}")
+    print(f"{'='*60}")
+    
+    try:
+        report = generate_report()
+        success = send_telegram_message(report)
+        
+        if success:
+            print("✅ Ежедневный отчет отправлен!")
+        else:
+            print("❌ Не удалось отправить ежедневный отчет")
+    except Exception as e:
+        print(f"❌ Ошибка при отправке отчета: {e}")
+
+def setup_scheduler():
+    """Настройка планировщика для отправки отчетов"""
+    print("\n📅 Настройка планировщика...")
+    
+    # Отправка в 6:40 по Москве (9:40 по Омску)
+    schedule.every().day.at("06:40").do(send_daily_report).tag("daily_report")
+    
+    print("✅ Планировщик настроен:")
+    print("   • Ежедневный отчет в 06:40 МСК (09:40 Омск)")
+    print("\n⏳ Ожидание времени отправки...")
+    print(f"   Следующая отправка: 06:40 МСК")
+    print(f"   Текущее время МСК: {get_current_time().strftime('%H:%M')}")
+    print(f"   Текущее время Омск: {get_omsk_time().strftime('%H:%M')}")
+
+def run_scheduler():
+    """Запуск планировщика"""
+    setup_scheduler()
+    
+    # Проверяем, не пора ли отправить сразу (если время после 6:40)
+    current_time = get_current_time()
+    if current_time.hour == 6 and current_time.minute >= 40:
+        print("\n⏰ Время уже 6:40+, отправляю отчет немедленно...")
+        send_daily_report()
+    elif current_time.hour > 6:
+        print(f"\n⏰ Сейчас уже {current_time.hour}:{current_time.minute}, жду завтра 6:40...")
+    
+    # Бесконечный цикл для планировщика
+    while True:
+        try:
+            schedule.run_pending()
+            time.sleep(60)  # Проверяем каждую минуту
+            
+            # Каждый час выводим статус
+            if datetime.now().minute == 0:
+                print(f"⏱️  Статус: {get_current_time().strftime('%H:%M МСК')} | Ожидание 06:40")
+                
+        except KeyboardInterrupt:
+            print("\n\n🛑 Планировщик остановлен пользователем")
+            break
+        except Exception as e:
+            print(f"⚠️ Ошибка в планировщике: {e}")
+            time.sleep(60)
+
 def main():
     """Основная функция"""
     print("=" * 60)
-    print("🚀 ИСПРАВЛЕННЫЙ БОТ ТАТНЕФТЬ")
+    print("🚀 ТАТНЕФТЬ БОТ С ПЛАНИРОВЩИКОМ")
+    print("=" * 60)
+    print("📅 Отчеты будут отправляться:")
+    print("   • Ежедневно в 06:40 по Москве")
+    print("   • Ежедневно в 09:40 по Омску")
     print("=" * 60)
     
+    # Проверка настроек
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ ОШИБКА: Нет Telegram токена или Chat ID!")
-        print("Добавьте в настройки:")
+        print("\nДобавьте в настройки:")
         print("1. TELEGRAM_BOT_TOKEN")
         print("2. TELEGRAM_CHAT_ID")
         return
     
-    print("\n📊 Генерация отчета...")
-    report = generate_report()
+    # Проверка отправки тестового сообщения
+    print("\n🔧 Тестирование подключения...")
+    test_msg = "🤖 ТАТНЕФТЬ БОТ ЗАПУЩЕН\n✅ Отчеты будут приходить в 06:40 МСК (09:40 Омск)"
     
-    print("\n📄 СВОДКА:")
-    print("-" * 40)
-    print(report)
-    print("-" * 40)
-    
-    print("\n📤 Отправка в Telegram...")
-    if send_telegram_message(report):
-        print("✅ ОТЧЕТ ОТПРАВЛЕН!")
+    if send_telegram_message(test_msg):
+        print("✅ Тестовое сообщение отправлено успешно!")
     else:
-        print("❌ ОШИБКА ОТПРАВКИ")
+        print("❌ Не удалось отправить тестовое сообщение")
+        return
     
+    # Запуск планировщика
+    print("\n" + "=" * 60)
+    print("🎯 БОТ ЗАПУЩЕН И РАБОТАЕТ")
     print("=" * 60)
+    print("\n📋 Для остановки нажмите Ctrl+C")
+    print("📊 Отчеты будут приходить автоматически")
+    print("=" * 60)
+    
+    run_scheduler()
 
 if __name__ == "__main__":
+    # Установите библиотеку schedule если еще не установлена:
+    # pip install schedule
+    
     main()
