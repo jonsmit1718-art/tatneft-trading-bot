@@ -29,8 +29,9 @@ jobs:
           
       - name: 🤖 Запуск бота Татнефть
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # ВНИМАНИЕ: Имена переменных должны совпадать с кодом!
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}  # ✅ Правильно
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}  # ✅ Правильно
         run: python tatneft_bot.py
         
       - name: ✅ Проверка успешности
