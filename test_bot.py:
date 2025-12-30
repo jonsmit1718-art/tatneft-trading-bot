@@ -1,0 +1,5 @@
+import os
+print("=== DEBUG INFO ===")
+print(f"Token exists: {os.environ.get('TELEGRAM_TOKEN') is not None}")
+print(f"Chat ID exists: {os.environ.get('TELEGRAM_CHAT_ID') is not None}")
+print("=== END DEBUG ===")
